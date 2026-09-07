@@ -203,27 +203,36 @@
 
   // ─── DATA-CONFIG BINDINGS (all [data-config="path.to.value"]) ──
 
-  // Fields that may legitimately contain HTML (e.g. <em>...</em> in hero title).
-  // CONFIG is author-controlled so HTML is trusted; safer than textContent for these.
+  // Escape config strings before they hit innerHTML. CONFIG is normally
+  // author-controlled, but some sites are now built by scraping a lead's
+  // own existing site content (rebuild_from_existing.py) — that scraped
+  // text should never be trusted as markup. Use for any config value
+  // interpolated into an innerHTML/template-literal HTML string; do NOT
+  // use for values set via textContent or via setAttribute (already safe).
+  const esc = (str) =>
+    String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  // Fields that legitimately contain HTML (e.g. <em>...</em> in hero title)
+  // and so are exempt from escaping — set via innerHTML on purpose.
+  // Narrowed 2026-09-06: fleet-wide grep of every config.js (`grep -lE
+  // "<(br|strong|em|b|i|span)[ />]" */config.js`) showed real <em> markup
+  // ONLY in these four fields (heroTitle: all sites incl. this reference,
+  // ctaBannerTitle, galleryTitle, faqTitle). Every other field previously
+  // in this set (heroLead, servicesTitle/Lead, galleryLead, areasTitle/Lead,
+  // whyTitle, reviewsTitle, faqLead, contactTitle/Lead, featuredQuote,
+  // eyebrow, ctaBannerSub) had zero HTML usage anywhere in the fleet, so
+  // they were dropped — they now fall through to the safe textContent
+  // branch below with no behavior change for any real site.
   const HTML_FIELDS = new Set([
     'content.heroTitle',
-    'content.heroLead',
-    'content.servicesTitle',
-    'content.servicesLead',
     'content.galleryTitle',
-    'content.galleryLead',
-    'content.areasTitle',
-    'content.areasLead',
-    'content.whyTitle',
-    'content.reviewsTitle',
     'content.faqTitle',
-    'content.faqLead',
-    'content.contactTitle',
-    'content.contactLead',
-    'content.featuredQuote',
-    'content.eyebrow',
-    'content.ctaBannerTitle',
-    'content.ctaBannerSub'
+    'content.ctaBannerTitle'
   ]);
 
   $$('[data-config]').forEach((el) => {
@@ -313,7 +322,7 @@
   const trustStrip = $('#trustStrip');
   if (trustStrip && CONFIG.content.trustSignals) {
     trustStrip.innerHTML = CONFIG.content.trustSignals
-      .map((t) => `<li>${t}</li>`)
+      .map((t) => `<li>${esc(t)}</li>`)
       .join('');
   }
 
@@ -326,7 +335,7 @@
       ...(CONFIG.business.suburbs || [])
     ];
     if (items.length) {
-      const inner = items.join('   ✦   ');
+      const inner = items.map(esc).join('   ✦   ');
       // double for seamless loop
       marquee.innerHTML = `<span>${inner}</span><span>${inner}</span>`;
     }
@@ -343,8 +352,8 @@
             <span class="service__icon">${ICONS[s.icon] || ICONS.wrench}</span>
             <span class="service__num">${String(i + 1).padStart(2, '0')}</span>
           </div>
-          <h3 class="service__title">${s.title}</h3>
-          <p class="service__desc">${s.desc}</p>
+          <h3 class="service__title">${esc(s.title)}</h3>
+          <p class="service__desc">${esc(s.desc)}</p>
         </li>
       `).join('');
   }
@@ -357,12 +366,12 @@
       .map((g) => `
         <li class="gallery-card${g.image ? ' gallery-card--photo' : ''}">
           <div class="gallery-card__art">${g.image
-            ? `<img src="${g.image}" alt="${(g.title || '').replace(/"/g, '&quot;')}" loading="lazy" decoding="async" />`
+            ? `<img src="${esc(g.image)}" alt="${esc(g.title || '')}" width="800" height="600" loading="lazy" decoding="async" />`
             : (GALLERY_ART[g.art || g.key] || '')}</div>
           <div class="gallery-card__body">
-            <span class="gallery-card__fig">${g.fig || ''}</span>
-            <h3 class="gallery-card__title">${g.title || ''}</h3>
-            <p class="gallery-card__caption">${g.caption || ''}</p>
+            <span class="gallery-card__fig">${esc(g.fig || '')}</span>
+            <h3 class="gallery-card__title">${esc(g.title || '')}</h3>
+            <p class="gallery-card__caption">${esc(g.caption || '')}</p>
           </div>
         </li>
       `).join('');
@@ -389,10 +398,10 @@
         <details class="faq-item">
           <summary>
             <span class="faq-item__num">${String(i + 1).padStart(2, '0')}</span>
-            <span class="faq-item__q">${f.q}</span>
+            <span class="faq-item__q">${esc(f.q)}</span>
             ${plusIcon}
           </summary>
-          <div class="faq-item__answer">${f.a}</div>
+          <div class="faq-item__answer">${esc(f.a)}</div>
         </details>
       `).join('');
   }
@@ -417,8 +426,8 @@
       .map((w, i) => `
         <li class="why-item">
           <span class="why-item__num">${String(i + 1).padStart(2, '0')}</span>
-          <h3 class="why-item__title">${w.title}</h3>
-          <p class="why-item__desc">${w.desc}</p>
+          <h3 class="why-item__title">${esc(w.title)}</h3>
+          <p class="why-item__desc">${esc(w.desc)}</p>
         </li>
       `).join('');
   }
@@ -438,10 +447,10 @@
       .map((r) => `
         <li class="review">
           <div class="review__stars">${starSvg.repeat(r.stars || 5)}</div>
-          <p class="review__body">${r.body}</p>
+          <p class="review__body">${esc(r.body)}</p>
           <div class="review__footer">
-            <span class="review__name">${r.name}</span>
-            <span class="review__source">${r.source || 'Google'}</span>
+            <span class="review__name">${esc(r.name)}</span>
+            <span class="review__source">${esc(r.source || 'Google')}</span>
           </div>
         </li>
       `).join('');
@@ -463,7 +472,7 @@
       .map((g) => `
         <li class="review review--guarantee">
           <div class="review__stars">${checkSvg}</div>
-          <p class="review__body">${g}</p>
+          <p class="review__body">${esc(g)}</p>
         </li>
       `).join('');
   }
